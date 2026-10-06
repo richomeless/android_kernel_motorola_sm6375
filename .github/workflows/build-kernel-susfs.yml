@@ -119,6 +119,55 @@ jobs:
           echo "=== leftover rejects ==="
           find . -name '*.rej' || true
 
+      - name: Backport path_umount (missing before kernel 5.9)
+        run: |
+          python3 - <<'PY'
+          p = 'fs/namespace.c'
+          s = open(p).read()
+          if 'int path_umount(' in s:
+              print('path_umount already present')
+          else:
+              anchor = 'SYSCALL_DEFINE2(umount,'
+              i = s.find(anchor)
+              assert i >= 0, 'umount syscall anchor missing'
+              func = '''/* backport of path_umount() from Linux 5.9 */
+          int path_umount(struct path *path, int flags)
+          {
+          	struct mount *mnt = real_mount(path->mnt);
+          	int ret;
+
+          	ret = -EINVAL;
+          	if (flags & ~(MNT_FORCE | MNT_DETACH | MNT_EXPIRE | UMOUNT_NOFOLLOW))
+          		goto out;
+          	ret = -EPERM;
+          	if (!may_mount())
+          		goto out;
+          	ret = -EINVAL;
+          	if (path->dentry != path->mnt->mnt_root)
+          		goto out;
+          	if (!check_mnt(mnt))
+          		goto out;
+          	if (mnt->mnt.mnt_flags & MNT_LOCKED)
+          		goto out;
+          	ret = -EPERM;
+          	if (flags & MNT_FORCE && !capable(CAP_SYS_ADMIN))
+          		goto out;
+          	ret = do_umount(mnt, flags);
+          out:
+          	/* we mustn't call path_put() as that would clear mnt_expiry_mark */
+          	dput(path->dentry);
+          	mntput_no_expire(mnt);
+          	return ret;
+          }
+
+          '''
+              func = '\n'.join(l[10:] if l.startswith('          ') else l for l in func.split('\n'))
+              s = s[:i] + func + s[i:]
+              open(p, 'w').write(s)
+              print('path_umount added')
+          PY
+          grep -n "path_umount" fs/namespace.c
+
       - name: Patch KernelSU symbol names
         run: |
           if grep -q "strncpy_from_user_nofault" include/linux/uaccess.h; then
