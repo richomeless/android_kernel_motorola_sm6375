@@ -6,9 +6,9 @@ on:
       defconfig:
         description: "Defconfig name (check arch/arm64/configs/)"
         default: "vendor/holi-qgki_defconfig"
-      ksu_setup:
-        description: "KernelSU-Next setup command suffix"
-        default: "next"
+      ksu_tag:
+        description: "KernelSU tag (last non-GKI version)"
+        default: "v0.9.5"
 
 jobs:
   build:
@@ -26,14 +26,9 @@ jobs:
             gcc-arm-linux-gnueabi bc bison flex libssl-dev libelf-dev \
             python3 zip curl git cpio
 
-      - name: Add KernelSU-Next (non-GKI)
+      - name: Add KernelSU (official, non-GKI tag)
         run: |
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s ${{ github.event.inputs.ksu_setup }}
-
-      - name: Patch KernelSU for old kernel
-        run: |
-          grep -rl "linux/pgtable.h" KernelSU-Next | xargs -r sed -i 's|<linux/pgtable.h>|<asm/pgtable.h>|g'
-          grep -rn "pgtable.h" KernelSU-Next || true
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s ${{ github.event.inputs.ksu_tag }}
 
       - name: Configure
         run: |
