@@ -23,21 +23,26 @@ jobs:
       - name: Get susfs4ksu patches
         run: |
           URL=https://gitlab.com/simonpunk/susfs4ksu.git
-          echo "--- available branches ---"
-          git ls-remote --heads $URL | sed 's|.*refs/heads/||'
           BR=$(git ls-remote --heads $URL | sed 's|.*refs/heads/||' | grep -E '5\.4' | head -1)
           echo "using branch: $BR"
           [ -n "$BR" ] || { echo "no 5.4 branch found"; exit 1; }
           git clone --depth=1 -b "$BR" $URL "$RUNNER_TEMP/susfs"
-          ls -R "$RUNNER_TEMP/susfs/kernel_patches" | head -40
 
-      - name: Dry-run KernelSU patch
+      - name: Apply KernelSU patch (runner only)
         run: |
           cp "$RUNNER_TEMP"/susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch KernelSU/
           cd KernelSU
-          patch -p1 --dry-run < 10_enable_susfs_for_ksu.patch || echo "KSU PATCH HAS FAILURES"
+          patch -p1 --no-backup-if-mismatch < 10_enable_susfs_for_ksu.patch || echo "KSU PATCH HAS FAILURES"
+          echo "=== KSU rejects ==="
+          find . -name '*.rej' -exec sh -c 'echo "--- $1"; cat "$1"' _ {} \;
 
-      - name: Dry-run kernel patch
+      - name: Apply kernel patch (runner only)
         run: |
           cp "$RUNNER_TEMP"/susfs/kernel_patches/50_add_susfs_in_kernel-*.patch .
-          patch -p1 --dry-run < 50_add_susfs_in_kernel-*.patch || echo "KERNEL PATCH HAS FAILURES"
+          patch -p1 --no-backup-if-mismatch < 50_add_susfs_in_kernel-*.patch || echo "KERNEL PATCH HAS FAILURES"
+          echo "=== kernel rejects ==="
+          find . -name '*.rej' -not -path './KernelSU/*' -exec sh -c 'echo "--- $1"; cat "$1"' _ {} \;
+          echo "=== struct vfsmount ==="
+          grep -n -B3 -A12 "struct vfsmount {" include/linux/mount.h
+          echo "=== task_mmu.c head ==="
+          sed -n 1,40p fs/proc/task_mmu.c
