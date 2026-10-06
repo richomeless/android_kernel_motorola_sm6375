@@ -1,0 +1,43 @@
+name: SUSFS dry run (patch check only)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout (full history, no blobs)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Pin source to the phone's kernel commit
+        run: git checkout -q c8bc4b74db62
+
+      - name: Add KernelSU v0.9.5
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s v0.9.5
+
+      - name: Get susfs4ksu patches
+        run: |
+          URL=https://gitlab.com/simonpunk/susfs4ksu.git
+          echo "--- available branches ---"
+          git ls-remote --heads $URL | sed 's|.*refs/heads/||'
+          BR=$(git ls-remote --heads $URL | sed 's|.*refs/heads/||' | grep -E '5\.4' | head -1)
+          echo "using branch: $BR"
+          [ -n "$BR" ] || { echo "no 5.4 branch found"; exit 1; }
+          git clone --depth=1 -b "$BR" $URL "$RUNNER_TEMP/susfs"
+          ls -R "$RUNNER_TEMP/susfs/kernel_patches" | head -40
+
+      - name: Dry-run KernelSU patch
+        run: |
+          cp "$RUNNER_TEMP"/susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch KernelSU/
+          cd KernelSU
+          patch -p1 --dry-run < 10_enable_susfs_for_ksu.patch || echo "KSU PATCH HAS FAILURES"
+
+      - name: Dry-run kernel patch
+        run: |
+          cp "$RUNNER_TEMP"/susfs/kernel_patches/50_add_susfs_in_kernel-*.patch .
+          patch -p1 --dry-run < 50_add_susfs_in_kernel-*.patch || echo "KERNEL PATCH HAS FAILURES"
