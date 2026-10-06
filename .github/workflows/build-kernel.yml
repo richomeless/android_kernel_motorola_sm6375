@@ -72,6 +72,7 @@ jobs:
         run: |
           export PATH="$HOME/clang/bin:$PATH"
           export ARCH=arm64
+          export LOCALVERSION=""
           mkdir -p out
           zcat "$RUNNER_TEMP/config.gz" > out/.config
           scripts/config --file out/.config -e KSU -d LOCALVERSION_AUTO \
@@ -87,6 +88,7 @@ jobs:
         run: |
           export PATH="$HOME/clang/bin:$PATH"
           export ARCH=arm64
+          export LOCALVERSION=""
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
           if ! make -k -j$(nproc) O=out LLVM=1 LLVM_IAS=1 Image > build.log 2>&1; then
@@ -95,6 +97,7 @@ jobs:
             exit 1
           fi
           ls -lh out/arch/arm64/boot/
+          cat out/include/config/kernel.release
 
       - name: Package with AnyKernel3
         run: |
